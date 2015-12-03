@@ -1,7 +1,7 @@
 use Test::Nginx::Socket;
 use Cwd qw(cwd);
 
-plan tests => repeat_each() * 18;
+plan tests => repeat_each() * 27;
 
 my $pwd = cwd();
 
@@ -111,7 +111,7 @@ Error parsing '10.10.20.0/40': Invalid prefix: /40
 --- request
 GET /a
 --- error_log
-Error parsing '300.0.0.0': Octet out of range: 300
+Error parsing '300.0.0.0': Invalid octet: 300
 --- response_body
 168430080 168430335
 168430336 168430591
@@ -214,4 +214,99 @@ GET /a
 --- no_error_log
 [error]
 --- response_body
-Octet out of range: 400
+Invalid octet: 400
+
+=== TEST 5: binip_in_cidrs checks ip exists in array of parsed cidrs
+--- http_config eval
+"$::HttpConfig"
+. q{
+}
+--- config
+    location /a {
+        content_by_lua '
+            local iputils = require("resty.iputils")
+            local cidrs = {
+                "127.0.0.0/24"
+            }
+            local parsed, err = iputils.parse_cidrs(cidrs)
+
+            local pass, err = iputils.binip_in_cidrs(ngx.var.binary_remote_addr, parsed)
+            if pass == true then
+                ngx.say("OK")
+            elseif err then
+                ngx.say(err)
+            else
+                ngx.say("FAIL")
+            end
+        ';
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+OK
+
+=== TEST 5a: binip_in_cidrs checks ip not exists in array of parsed cidrs
+--- http_config eval
+"$::HttpConfig"
+. q{
+}
+--- config
+    location /a {
+        content_by_lua '
+            local iputils = require("resty.iputils")
+            local cidrs = {
+                "128.0.0.0/24"
+            }
+            local parsed, err = iputils.parse_cidrs(cidrs)
+
+            local pass, err = iputils.binip_in_cidrs(ngx.var.binary_remote_addr, parsed)
+            if pass == false then
+                ngx.say("OK")
+            elseif err then
+                ngx.say(err)
+            else
+                ngx.say("FAIL")
+            end
+        ';
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+OK
+
+=== TEST 5b: binip_in_cidrs checks ip exists in array of parsed cidrs
+--- http_config eval
+"$::HttpConfig"
+. q{
+}
+--- config
+    location /a {
+        content_by_lua '
+            local iputils = require("resty.iputils")
+            local cidrs = {
+                "128.0.0.0/24",
+                "127.0.0.1"
+            }
+            local parsed, err = iputils.parse_cidrs(cidrs)
+
+            local pass, err = iputils.binip_in_cidrs(ngx.var.binary_remote_addr, parsed)
+            if pass == true then
+                ngx.say("OK")
+            elseif err then
+                ngx.say(err)
+            else
+                ngx.say("FAIL")
+            end
+        ';
+    }
+--- request
+GET /a
+--- no_error_log
+[error]
+--- response_body
+OK
+
